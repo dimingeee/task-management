@@ -12,10 +12,10 @@
 :root{
   --ink:#1B2A4A;
   --ink-2:#28395c;
-  --paper:#F7F4EC;
-  --paper-2:#EFEADC;
-  --card:#FFFDF7;
-  --line:#DCD5C2;
+  --paper:#FFFFFF;
+  --paper-2:#F4F4F4;
+  --card:#FFFFFF;
+  --line:#E4E2DC;
   --stamp:#B23A2E;
   --stamp-soft:#E7CFC7;
   --brass:#A9793E;
@@ -28,6 +28,10 @@
   --mono: 'Roboto Mono','SFMono-Regular',Consolas,'Liberation Mono',monospace;
   --serif: 'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
   --sans: 'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  /* 권리별 구분 색 (파스텔) */
+  --patent-bg:#FDF0F3;   --patent-bg-hover:#FCE6EB;  --patent-tag-bg:#FBDCE3; --patent-tag-fg:#9C3A56;
+  --design-bg:#EEF6FB;   --design-bg-hover:#E1EFF8;  --design-tag-bg:#D9EAF6; --design-tag-fg:#2E6690;
+  --tm-bg:#F5F1FA;       --tm-bg-hover:#EAE2F5;      --tm-tag-bg:#E7DBF5;    --tm-tag-fg:#6B3FA0;
 }
 .auth-screen{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#1B2A4A;padding:20px}
 .auth-card{width:min(420px,100%);background:#FFFDF7;border-radius:16px;padding:30px;box-shadow:0 20px 60px rgba(0,0,0,.28)}
@@ -38,9 +42,7 @@
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{
-  background:
-    radial-gradient(ellipse at top left, #fbf9f2 0%, var(--paper) 55%),
-    repeating-linear-gradient(0deg, rgba(0,0,0,0.012) 0px, rgba(0,0,0,0.012) 1px, transparent 1px, transparent 26px);
+  background:#FFFFFF;
   color:var(--text);
   font-family:var(--sans);
   min-height:100vh;
@@ -160,50 +162,71 @@ input[type=file]{display:none;}
 .table{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--card);}
 .trow{
   display:grid;
-  grid-template-columns:108px 64px 110px 1.1fr 2fr 140px 46px;
+  grid-template-columns:66px 100px 1fr 1fr 1.6fr 112px 96px 1.6fr 44px;
   gap:14px;align-items:center;
   padding:12px 18px;border-bottom:1px solid var(--line);
   font-size:13.5px;
+  border-left:3px solid transparent;
 }
 .trow:last-child{border-bottom:none;}
 .trow.head{
   background:var(--ink);color:var(--paper);font-size:11px;letter-spacing:0.5px;
   font-family:var(--mono);text-transform:uppercase;padding:9px 14px;
+  border-left:3px solid transparent;
 }
 .sortable{cursor:pointer;user-select:none;}
 .sortable:hover{color:#fff;text-decoration:underline;}
 .trow.done{opacity:0.45;}
-.trow.overdue:not(.head){background:rgba(178,58,46,0.045);}
-.trow:hover:not(.head){background:rgba(27,42,74,0.03);}
+.trow.overdue:not(.head){border-left-color:var(--stamp);}
+.trow:hover:not(.head){box-shadow:inset 0 0 0 999px rgba(27,42,74,0.035);}
+
+/* 권리별 배경 구분 (특허=연핑크 / 디자인=연하늘 / 상표=연보라) */
+.trow.row-patent:not(.head){background:var(--patent-bg);}
+.trow.row-design:not(.head){background:var(--design-bg);}
+.trow.row-tm:not(.head){background:var(--tm-bg);}
+.trow.row-patent:not(.head):hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,0.03);}
+.trow.row-design:not(.head):hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,0.03);}
+.trow.row-tm:not(.head):hover{box-shadow:inset 0 0 0 999px rgba(0,0,0,0.03);}
 
 .dday{
   font-family:var(--mono);font-weight:700;font-size:13px;
-  display:inline-flex;align-items:center;gap:6px;
+  display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;
 }
 .dday .badge{
   border-radius:3px;padding:2px 7px;font-size:11.5px;font-weight:700;
   border:1px solid transparent;
 }
-.dday .date{color:var(--muted);font-size:10.5px;font-weight:400;display:block;}
+.dday .date{font-weight:700;font-size:12.5px;display:block;}
 .badge.b-overdue{background:var(--stamp);color:#fff;}
 .badge.b-soon{background:var(--warn-soft);color:#7a5a10;border-color:var(--warn);}
 .badge.b-ok{background:var(--paper-2);color:var(--muted);border-color:var(--line);}
 .badge.b-none{background:transparent;color:var(--muted);border:1px dashed var(--line);}
+.date-red{color:var(--stamp);}
 
 .tag-right{
   font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:3px;
   display:inline-block;font-weight:700;letter-spacing:0.3px;
 }
-.tag-patent{background:#E4E9F2;color:var(--ink-2);}
-.tag-design{background:#EFE3F0;color:#6B3E70;}
-.tag-tm{background:#E3EFE6;color:#33613F;}
+.tag-patent{background:var(--patent-tag-bg);color:var(--patent-tag-fg);}
+.tag-design{background:var(--design-tag-bg);color:var(--design-tag-fg);}
+.tag-tm{background:var(--tm-tag-bg);color:var(--tm-tag-fg);}
 
 .ourref{font-family:var(--mono);font-size:12px;color:var(--muted);}
 .party{font-weight:600;}
+.appno-cell{font-family:var(--mono);font-size:12px;color:var(--muted);}
 .name-cell .name{display:block;}
 .name-cell .meta{
   font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:2px;
 }
+.note-cell{width:100%;}
+.note-input{
+  width:100%;min-height:34px;resize:vertical;
+  font-family:var(--sans);font-size:12.5px;color:var(--text);
+  border:1px solid var(--line);border-radius:4px;background:rgba(255,255,255,0.7);
+  padding:6px 8px;box-sizing:border-box;
+}
+.note-input:focus{outline:none;border-color:var(--brass);background:#FFFFFF;}
+.note-input::placeholder{color:var(--muted);}
 .cat-badge{
   font-size:11px;padding:3px 9px;border-radius:3px;border:1px solid var(--line);
   background:var(--paper-2);color:var(--text);white-space:nowrap;
@@ -251,10 +274,27 @@ input[type=file]{display:none;}
 }
 
 @media (max-width:760px){
-  .trow{grid-template-columns:70px 44px 1fr 40px;grid-template-areas:"dd rt name ck" "dd rt meta ck";}
+  .trow{
+    grid-template-columns:1fr 1fr;
+    grid-template-areas:
+      "rt dday"
+      "party appno"
+      "name name"
+      "cat cat"
+      "note note"
+      "ck ck";
+    row-gap:6px;
+  }
   .trow.head{display:none;}
-  .col-ourref,.col-cat{display:none;}
-  .trow{row-gap:2px;}
+  .col-ourref{display:none;}
+  .cell-right{grid-area:rt;}
+  .cell-due{grid-area:dday;justify-self:end;}
+  .cell-party{grid-area:party;}
+  .cell-appno{grid-area:appno;justify-self:end;}
+  .cell-name{grid-area:name;}
+  .cell-cat{grid-area:cat;}
+  .cell-note{grid-area:note;}
+  .cell-done{grid-area:ck;justify-self:end;}
 }
 
 /* ---------- PDF review modal ---------- */
@@ -452,6 +492,12 @@ function rightTagClass(right){
   if(right === '상표') return 'tag-tm';
   return 'tag-patent';
 }
+function rightRowClass(right){
+  if(right === '특허') return 'row-patent';
+  if(right === '디자인') return 'row-design';
+  if(right === '상표') return 'row-tm';
+  return '';
+}
 function ddayBadge(dateStr){
   const dd = ddayOf(dateStr);
   if(dd === null) return { cls:'b-none', label:'미정' };
@@ -602,12 +648,14 @@ function sortArrow(field){
 function renderSortHead(){
   const head = document.getElementById('thead');
   head.innerHTML = `<div class="trow head">
-    <div class="sortable" data-sort="dueDate">마감일${sortArrow('dueDate')}</div>
     <div class="sortable" data-sort="right">권리${sortArrow('right')}</div>
     <div class="sortable col-ourref" data-sort="ourRef">Our-Ref${sortArrow('ourRef')}</div>
-    <div class="sortable" data-sort="party">의뢰인 / 출원번호${sortArrow('party')}</div>
-    <div class="sortable" data-sort="name">사건명${sortArrow('name')}</div>
-    <div class="sortable col-cat" data-sort="category">구분${sortArrow('category')}</div>
+    <div class="sortable" data-sort="party">출원인${sortArrow('party')}</div>
+    <div class="sortable" data-sort="appNo">출원번호${sortArrow('appNo')}</div>
+    <div class="sortable" data-sort="name">명칭${sortArrow('name')}</div>
+    <div class="sortable col-cat" data-sort="category">마감종류${sortArrow('category')}</div>
+    <div class="sortable" data-sort="dueDate">마감일${sortArrow('dueDate')}</div>
+    <div>비고</div>
     <div></div>
   </div>`;
   head.querySelectorAll('.sortable').forEach(el=>{
@@ -639,27 +687,28 @@ function renderTable(){
     const badge = ddayBadge(r.dueDate);
     const done = isDone(r.status);
     const overdueCls = (!done && badge.cls==='b-overdue') ? 'overdue' : '';
+    const rowRightCls = rightRowClass(r.right);
     html += `
-    <div class="trow ${done?'done':''} ${overdueCls}" data-id="${r.id}" title="클릭해서 이 항목 수정">
-      <div class="dday">
-        <span class="badge ${badge.cls}">${badge.label}</span>
-        <span class="date">${fmtDate(r.dueDate)}</span>
-      </div>
-      <div><span class="tag-right ${rightTagClass(r.right)}">${r.right||'-'}</span></div>
-      <div class="ourref col-ourref">${r.ourRef||'-'}</div>
-      <div>
-        <span class="party">${r.party||'-'}</span><br/>
-        <span class="ourref">${r.appNo||'-'}</span>
-      </div>
-      <div class="name-cell">
+    <div class="trow ${rowRightCls} ${done?'done':''} ${overdueCls}" data-id="${r.id}" title="클릭해서 이 항목 수정">
+      <div class="cell-right"><span class="tag-right ${rightTagClass(r.right)}">${r.right||'-'}</span></div>
+      <div class="cell-ourref col-ourref ourref">${r.ourRef||'-'}</div>
+      <div class="cell-party party">${r.party||'-'}</div>
+      <div class="cell-appno appno-cell">${r.appNo||'-'}</div>
+      <div class="cell-name name-cell">
         <span class="name">${r.name||'-'}</span>
-        <span class="meta note-toggle" data-note="${r.id}">메모 ${r.memo ? '✎' : '＋'} ${r.note ? '· 비고 있음' : ''}</span>
+        <span class="meta note-toggle" data-note="${r.id}">메모 ${r.memo ? '✎' : '＋'}</span>
       </div>
-      <div class="col-cat"><span class="cat-badge src-${r.source}">${r.category||srcLabel(r.source)}</span></div>
-      <div><input type="checkbox" class="done-check" ${done?'checked':''} data-id="${r.id}" title="완료 처리"/></div>
+      <div class="cell-cat col-cat"><span class="cat-badge src-${r.source}">${r.category||srcLabel(r.source)}</span></div>
+      <div class="cell-due dday">
+        <span class="date date-red">${fmtDate(r.dueDate)}</span>
+        <span class="badge ${badge.cls}">${badge.label}</span>
+      </div>
+      <div class="cell-note note-cell">
+        <textarea class="note-input" data-id="${r.id}" placeholder="비고 입력" rows="1">${r.note||''}</textarea>
+      </div>
+      <div class="cell-done"><input type="checkbox" class="done-check" ${done?'checked':''} data-id="${r.id}" title="완료 처리"/></div>
     </div>
     <div class="note-row" id="note-${r.id}">
-      ${r.note ? `<div class="note-orig"><span class="note-orig-lbl">비고</span>${r.note}</div>` : ''}
       <div class="memo-block">
         <span class="note-orig-lbl">내 메모</span>
         <textarea class="memo-input" data-id="${r.id}" placeholder="이 건에 대해 알아둘 내용을 적어두세요 (자동 저장)">${r.memo||''}</textarea>
@@ -700,6 +749,21 @@ function renderTable(){
       rec.memo = e.target.value;
       clearTimeout(memoTimers[id]);
       memoTimers[id] = setTimeout(async ()=>{
+        await saveRecords();
+      }, 500);
+    });
+  });
+
+  let noteTimers = {};
+  body.querySelectorAll('.note-input').forEach(ta=>{
+    ta.addEventListener('click', e=>e.stopPropagation());
+    ta.addEventListener('input', (e)=>{
+      const id = e.target.getAttribute('data-id');
+      const rec = RECORDS.find(x=>x.id===id);
+      if(!rec) return;
+      rec.note = e.target.value;
+      clearTimeout(noteTimers[id]);
+      noteTimers[id] = setTimeout(async ()=>{
         await saveRecords();
       }, 500);
     });
