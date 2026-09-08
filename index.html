@@ -816,11 +816,11 @@ function cellToDateStr(v){
     const d = excelSerialToDate(v);
     if(isNaN(d)) return null;
     const p = n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())}`;
   }
   if(v instanceof Date){
     const p = n=>String(n).padStart(2,'0');
-    return `${v.getFullYear()}-${p(v.getMonth()+1)}-${p(v.getDate())}`;
+    return `${v.getUTCFullYear()}-${p(v.getUTCMonth()+1)}-${p(v.getUTCDate())}`;
   }
   const s = String(v).trim();
   const m = s.match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/);
