@@ -544,8 +544,12 @@ async function uploadCasePdf(id, file){
   const cell = document.querySelector(`.cell-pdf[data-id="${id}"]`);
   if(cell) cell.classList.add('pdf-uploading');
   try{
-    const safeName = file.name.replace(/[^\w.\-가-힣]/g,'_');
-    const path = `${id}/${Date.now()}_${safeName}`;
+    // Supabase Storage 키는 비ASCII(한글 등) 문자를 지원하지 않으므로
+    // 저장 경로는 ASCII로만 구성하고, 원본 파일명은 rec.pdfName에 별도 보존한다.
+    const extMatch = file.name.match(/\.[^.\/]+$/);
+    const ext = extMatch ? extMatch[0] : '.pdf';
+    const safeName = `${Date.now()}_${Math.random().toString(36).slice(2,8)}${ext}`;
+    const path = `${id}/${safeName}`;
     const { error: upErr } = await supabaseClient.storage.from(PDF_BUCKET).upload(path, file, { upsert:true, contentType:'application/pdf' });
     if(upErr) throw upErr;
     const { data } = supabaseClient.storage.from(PDF_BUCKET).getPublicUrl(path);
