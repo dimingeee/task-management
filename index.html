@@ -162,7 +162,7 @@ input[type=file]{display:none;}
 .table{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--card);}
 .trow{
   display:grid;
-  grid-template-columns:66px 100px 1fr 1fr 1.6fr 112px 96px 1.6fr 44px;
+  grid-template-columns:66px 100px 1fr 1fr 1.6fr 112px 96px 1.6fr 40px 44px;
   gap:14px;align-items:center;
   padding:12px 18px;border-bottom:1px solid var(--line);
   font-size:13.5px;
@@ -240,6 +240,19 @@ input[type=file]{display:none;}
 }
 
 .note-toggle{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--brass);}
+.cell-pdf{text-align:center;}
+.pdf-link,.pdf-upload-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:14px;
+  text-decoration:none;
+}
+.pdf-link{background:var(--ok-soft);color:var(--ok);}
+.pdf-link:hover{filter:brightness(0.95);}
+.pdf-upload-btn{background:var(--paper-2);color:var(--muted);border:1px dashed var(--line);}
+.pdf-upload-btn:hover{border-color:var(--brass);color:var(--brass);}
+.pdf-uploading{opacity:0.5;pointer-events:none;}
+.pdf-edit-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;}
+.pdf-edit-row a{color:var(--ok);font-weight:600;}
 .note-row{
   padding:0 14px 14px 14px;font-size:12.5px;color:var(--muted);
   border-bottom:1px solid var(--line);background:rgba(0,0,0,0.012);
@@ -282,7 +295,7 @@ input[type=file]{display:none;}
       "name name"
       "cat cat"
       "note note"
-      "ck ck";
+      "pdf ck";
     row-gap:6px;
   }
   .trow.head{display:none;}
@@ -294,6 +307,7 @@ input[type=file]{display:none;}
   .cell-name{grid-area:name;}
   .cell-cat{grid-area:cat;}
   .cell-note{grid-area:note;}
+  .cell-pdf{grid-area:pdf;justify-self:start;}
   .cell-done{grid-area:ck;justify-self:end;}
 }
 
@@ -507,6 +521,63 @@ function ddayBadge(dateStr){
   return { cls:'b-ok', label:`D-${dd}` };
 }
 
+function pdfCellHtml(r){
+  if(r.pdfUrl){
+    return `<a href="${r.pdfUrl}" target="_blank" rel="noopener" class="pdf-link" title="${(r.pdfName||'PDF')} 보기/다운로드" onclick="event.stopPropagation()">📄</a>`;
+  }
+  return `<label class="pdf-upload-btn" title="PDF 업로드" onclick="event.stopPropagation()">
+    📎<input type="file" accept="application/pdf" class="pdf-input" data-id="${r.id}" style="display:none"/>
+  </label>`;
+}
+
+/* ===================== PDF 첨부 (Supabase Storage) ===================== */
+const PDF_BUCKET = 'case-pdfs';
+
+async function uploadCasePdf(id, file){
+  if(!file) return;
+  if(file.type !== 'application/pdf'){
+    alert('PDF 파일만 업로드할 수 있어요.');
+    return;
+  }
+  const rec = RECORDS.find(r=>r.id===id);
+  if(!rec) return;
+  const cell = document.querySelector(`.cell-pdf[data-id="${id}"]`);
+  if(cell) cell.classList.add('pdf-uploading');
+  try{
+    const safeName = file.name.replace(/[^\w.\-가-힣]/g,'_');
+    const path = `${id}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabaseClient.storage.from(PDF_BUCKET).upload(path, file, { upsert:true, contentType:'application/pdf' });
+    if(upErr) throw upErr;
+    const { data } = supabaseClient.storage.from(PDF_BUCKET).getPublicUrl(path);
+    rec.pdfUrl = data.publicUrl;
+    rec.pdfName = file.name;
+    rec.pdfPath = path;
+    await saveRecords();
+    renderTable();
+  }catch(e){
+    console.error('PDF 업로드 실패', e);
+    alert('PDF 업로드에 실패했습니다: ' + (e.message||e));
+    if(cell) cell.classList.remove('pdf-uploading');
+  }
+}
+
+async function removeCasePdf(id){
+  const rec = RECORDS.find(r=>r.id===id);
+  if(!rec || !rec.pdfUrl) return;
+  if(!confirm('첨부된 PDF를 삭제할까요?')) return;
+  try{
+    if(rec.pdfPath){
+      await supabaseClient.storage.from(PDF_BUCKET).remove([rec.pdfPath]);
+    }
+  }catch(e){
+    console.error('PDF 스토리지 삭제 실패', e);
+  }
+  rec.pdfUrl = null;
+  rec.pdfName = null;
+  rec.pdfPath = null;
+  await saveRecords();
+}
+
 /* ===================== 저장/불러오기 ===================== */
 let storageMode = 'unknown'; // 'cloud' | 'local' | 'none'
 
@@ -656,6 +727,7 @@ function renderSortHead(){
     <div class="sortable col-cat" data-sort="category">마감종류${sortArrow('category')}</div>
     <div class="sortable" data-sort="dueDate">마감일${sortArrow('dueDate')}</div>
     <div>비고</div>
+    <div>PDF</div>
     <div></div>
   </div>`;
   head.querySelectorAll('.sortable').forEach(el=>{
@@ -706,6 +778,7 @@ function renderTable(){
       <div class="cell-note note-cell">
         <textarea class="note-input" data-id="${r.id}" placeholder="비고 입력" rows="1">${r.note||''}</textarea>
       </div>
+      <div class="cell-pdf" data-id="${r.id}">${pdfCellHtml(r)}</div>
       <div class="cell-done"><input type="checkbox" class="done-check" ${done?'checked':''} data-id="${r.id}" title="완료 처리"/></div>
     </div>
     <div class="note-row" id="note-${r.id}">
@@ -773,6 +846,18 @@ function renderTable(){
     row.addEventListener('click', ()=>{
       openEditModal(row.getAttribute('data-id'));
     });
+  });
+
+  body.querySelectorAll('.pdf-input').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('change', async (e)=>{
+      const id = e.target.getAttribute('data-id');
+      const file = e.target.files[0];
+      if(file) await uploadCasePdf(id, file);
+    });
+  });
+  body.querySelectorAll('.pdf-link').forEach(a=>{
+    a.addEventListener('click', e=>e.stopPropagation());
   });
 }
 
@@ -1324,6 +1409,7 @@ async function handlePdfFiles(fileList){
       const fullText = lines.join('\n');
       const draft = detectAndParse(lines, fullText, file.name);
       draft.tempId = 'd'+Math.random().toString(36).slice(2,9);
+      draft.sourceFile = file;
       pendingDrafts.push(draft);
     }catch(e){
       pendingDrafts.push({ failed:true, filename:file.name, preview:'PDF 텍스트 추출 실패: '+e.message, tempId:'d'+Math.random().toString(36).slice(2,9) });
@@ -1410,9 +1496,11 @@ function renderModal(){
 async function commitDrafts(){
   const ok = pendingDrafts.filter(d=>!d.failed);
   if(ok.length===0){ closeModal(); return; }
+  const newIdsWithFile = [];
   ok.forEach(d=>{
+    const id = 'pdf-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
     RECORDS.push({
-      id: 'pdf-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
+      id,
       source: d.source||'REG',
       category: d.category,
       right: d.right,
@@ -1427,11 +1515,15 @@ async function commitDrafts(){
       regNo: d.regNo,
       memo: '',
     });
+    if(d.sourceFile) newIdsWithFile.push({ id, file: d.sourceFile });
   });
   await saveRecords();
   closeModal();
   renderTable();
   document.getElementById('lastUpdated').textContent = 'PDF ' + ok.length + '건 반영됨 · ' + new Date().toLocaleString('ko-KR');
+  for(const { id, file } of newIdsWithFile){
+    await uploadCasePdf(id, file);
+  }
 }
 
 /* ===================== 개별 항목 수정/추가 모달 ===================== */
@@ -1475,8 +1567,26 @@ function renderEditForm(rec){
       </select>
       <label class="full">비고</label>
       <textarea class="full memo-input" id="ef-note" rows="2">${rec.note||''}</textarea>
+      <label>첨부 PDF</label>
+      <div class="full pdf-edit-row" id="ef-pdf-row">
+        ${rec.pdfUrl
+          ? `<a href="${rec.pdfUrl}" target="_blank" rel="noopener">📄 ${rec.pdfName||'PDF 보기/다운로드'}</a>
+             <button type="button" class="btn small ghost" id="ef-pdf-remove">삭제</button>`
+          : `<span class="meta">등록된 PDF 없음</span>
+             <input type="file" id="ef-pdf-input" accept="application/pdf"/>`
+        }
+      </div>
     </div>
   `;
+  const removeBtn = document.getElementById('ef-pdf-remove');
+  if(removeBtn){
+    removeBtn.addEventListener('click', async ()=>{
+      if(!rec.id) return;
+      await removeCasePdf(rec.id);
+      const updated = RECORDS.find(x=>x.id===rec.id);
+      renderEditForm(updated || rec);
+    });
+  }
 }
 
 function openEditModal(id){
@@ -1523,20 +1633,27 @@ async function saveEditModal(){
     alert('의뢰인, 사건명, 출원번호 중 최소 하나는 입력해주세요.');
     return;
   }
+  let targetId = editingId;
   if(editingId){
     const rec = RECORDS.find(r=>r.id===editingId);
     if(rec) Object.assign(rec, values);
   } else {
+    targetId = 'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
     RECORDS.push({
-      id: 'manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
+      id: targetId,
       ...values,
       amount: null,
       memo: '',
     });
   }
   await saveRecords();
+  const pdfInput = document.getElementById('ef-pdf-input');
+  const pdfFile = pdfInput && pdfInput.files[0];
   closeEditModal();
   renderTable();
+  if(pdfFile && targetId){
+    await uploadCasePdf(targetId, pdfFile);
+  }
 }
 
 async function deleteEditModal(){
