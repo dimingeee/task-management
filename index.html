@@ -919,7 +919,7 @@ async function handleFiles(fileList){
   let importedBySource = {};
   for(const file of files){
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type:'array', cellDates:true });
+    const wb = XLSX.read(buf, { type:'array', cellDates:false });
     wb.SheetNames.forEach(sn=>{
       const ws = wb.Sheets[sn];
       const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
