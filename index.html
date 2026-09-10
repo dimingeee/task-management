@@ -1257,27 +1257,46 @@ async function pdfToLines(arrayBuffer){
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const maxPages = Math.min(pdf.numPages, 5);
   let lines = [];
+  // 발송번호/제출기일 같은 사이드 박스가 본문과 같은 y좌표에 걸쳐 있으면
+  // 같은 줄로 잘못 합쳐질 수 있어, x 간격이 크게 벌어지는 지점에서 줄을 분리한다.
+  const COLUMN_GAP = 60;
+  function flushRow(rowItems){
+    if(!rowItems.length) return;
+    rowItems.sort((a,b)=>a.x-b.x);
+    let seg = [rowItems[0].str];
+    let lastX = rowItems[0].x + (rowItems[0].width || 0);
+    for(let i=1;i<rowItems.length;i++){
+      const it = rowItems[i];
+      if(it.x - lastX > COLUMN_GAP){
+        lines.push(seg.join(' ').replace(/\s+/g,' ').trim());
+        seg = [];
+      }
+      seg.push(it.str);
+      lastX = it.x + (it.width || 0);
+    }
+    if(seg.length) lines.push(seg.join(' ').replace(/\s+/g,' ').trim());
+  }
   for(let p=1;p<=maxPages;p++){
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
     const items = content.items.map(it=>({
-      str: it.str, x: it.transform[4], y: Math.round(it.transform[5])
+      str: it.str, x: it.transform[4], y: Math.round(it.transform[5]), width: it.width || 0
     })).filter(it=>it.str && it.str.trim()!=='');
     items.sort((a,b)=> b.y - a.y || a.x - b.x);
-    let curY = null, curLine = [];
+    let curY = null, curRow = [];
     items.forEach(it=>{
       if(curY===null || Math.abs(it.y - curY) > 4){
-        if(curLine.length) lines.push(curLine.join(' ').replace(/\s+/g,' ').trim());
-        curLine = [it.str];
+        flushRow(curRow);
+        curRow = [it];
         curY = it.y;
       } else {
-        curLine.push(it.str);
+        curRow.push(it);
       }
     });
-    if(curLine.length) lines.push(curLine.join(' ').replace(/\s+/g,' ').trim());
+    flushRow(curRow);
     lines.push(''); // 페이지 구분 공백
   }
-  return lines.filter(l=>l!=='' || true);
+  return lines;
 }
 
 function nextNonEmptyAfter(lines, idx){
@@ -1438,6 +1457,10 @@ function parseOARequest(lines, fullText){
   else if(/상표법/.test(fullText)) draft.right = '상표';
 
   draft.appNo = findValueSameLine(lines, /출\s*원\s*번\s*호\D*?([\d\-]{8,})/);
+  if(!draft.appNo){
+    const m = fullText.match(/출\s*원\s*번\s*호[^\d]{0,10}([\d\-]{8,})/);
+    if(m) draft.appNo = m[1];
+  }
   if(!draft.right && draft.appNo){
     if(draft.appNo.startsWith('10-')) draft.right = '특허';
     else if(draft.appNo.startsWith('30-')) draft.right = '디자인';
@@ -1452,6 +1475,10 @@ function parseOARequest(lines, fullText){
       v = v.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim(); // 특허고객번호 등 괄호 제거
       draft.party = v || null;
     }
+  }
+  if(!draft.party){
+    const m = fullText.match(/출\s*원\s*인\s*(?:명\s*칭|성\s*명)\s*([^\n(（]+)/);
+    if(m) draft.party = m[1].trim().replace(/\s+/g,' ') || null;
   }
 
   const nameIdx = findLineIdx(lines, /발\s*명\s*의\s*명\s*칭|디자인의\s*대상이\s*되는\s*물품/);
@@ -1475,6 +1502,10 @@ function parseOARequest(lines, fullText){
       const d = koDateToObj(m[1],m[2],m[3]);
       draft.dueDate = toISO(d);
     }
+  }
+  if(!draft.dueDate){
+    const m = fullText.match(/제\s*출\s*기\s*일[^\d]{0,10}(\d{4})[.\-](\d{1,2})[.\-](\d{1,2})/);
+    if(m) draft.dueDate = toISO(koDateToObj(m[1],m[2],m[3]));
   }
 
   return draft;
