@@ -347,8 +347,14 @@ input[type=file]{display:none;}
 }
 .modal-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
 .modal-head h2{font-family:var(--sans);font-size:18px;margin:0;color:var(--ink);font-weight:700;}
+.modal-title-input{
+  font-family:var(--sans);font-size:20px;font-weight:700;color:var(--ink);
+  border:none;background:none;padding:2px 0;flex:1;min-width:0;
+}
+.modal-title-input:focus{outline:none;border-bottom:2px solid var(--primary);}
 .modal-sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
 .modal-close{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;line-height:1;}
+#editModalOverlay .modal-card{max-width:1180px;}
 
 .draft-card{
   border:1px solid var(--line);border-radius:10px;background:var(--card);
@@ -397,11 +403,33 @@ input[type=file]{display:none;}
 }
 .related-docs{display:flex;flex-direction:column;gap:8px;}
 .related-doc-item{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;
-  background:var(--paper-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;
+  background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+  cursor:pointer;transition:border-color .12s ease;
 }
+.related-doc-item:hover{border-color:var(--primary);}
 .related-doc-cat{font-weight:600;}
 .related-doc-item a{color:var(--ok);font-weight:600;}
+
+.edit-layout{display:flex;gap:22px;align-items:flex-start;}
+.edit-layout .edit-form{flex:1 1 auto;min-width:0;}
+.edit-sidebar{width:300px;flex:0 0 300px;display:flex;flex-direction:column;gap:14px;}
+.sidebar-box{
+  background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+}
+.sidebar-box-title{
+  font-family:var(--sans);font-size:11.5px;font-weight:700;color:var(--muted);
+  margin-bottom:8px;letter-spacing:.1px;
+}
+.sidebar-box .field{margin-bottom:8px;}
+.sidebar-box .field:last-child{margin-bottom:0;}
+.input-with-btn{display:flex;gap:6px;}
+.input-with-btn input{flex:1;min-width:0;}
+.pdf-edit-row.drop-hover{border-color:var(--primary);background:var(--primary-soft);}
+@media (max-width: 760px){
+  .edit-layout{flex-direction:column;}
+  .edit-sidebar{width:100%;flex:1 1 auto;}
+}
 .dropzone-hint{
   border:1.5px dashed var(--line-strong);border-radius:8px;padding:14px;text-align:center;
   font-size:12.5px;color:var(--muted);margin-bottom:14px;
@@ -508,7 +536,10 @@ body.drag-active .drop-overlay{display:flex;}
 
 <div class="modal-overlay" id="editModalOverlay">
   <div class="modal-card">
-    <div class="modal-head"><h2 id="editModalTitle">항목 수정</h2><button class="modal-close" id="editModalCloseBtn">✕</button></div>
+    <div class="modal-head">
+      <input id="ef-ourRef" class="modal-title-input" placeholder="사례번호 (예: P00001062)"/>
+      <button class="modal-close" id="editModalCloseBtn">✕</button>
+    </div>
     <div class="modal-sub">이 사건의 내용을 직접 입력·수정할 수 있어요.</div>
     <div id="editModalBody"></div>
     <div class="modal-actions">
@@ -1132,6 +1163,7 @@ async function init(){
   }
   document.getElementById('authScreen').style.display = 'none';
   await loadRecords();
+  await loadClients();
   wireFilters();
   wireSidebar();
   renderTable();
@@ -1748,78 +1780,84 @@ let editingId = null; // null이면 "새 사건 추가" 모드
 
 function renderEditForm(rec){
   document.getElementById('editModalBody').innerHTML = `
-    <div class="edit-form">
-      <div class="field">
-        <label>장부</label>
-        <select id="ef-source">
-          <option value="OA" ${rec.source==='OA'?'selected':''}>의견제출통지 등</option>
-          <option value="FEE" ${rec.source==='FEE'?'selected':''}>등록료 납부</option>
-          <option value="REG" ${rec.source==='REG'?'selected':''}>등록후관리</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>권리</label>
-        <select id="ef-right">
-          <option value="특허" ${rec.right==='특허'?'selected':''}>특허</option>
-          <option value="디자인" ${rec.right==='디자인'?'selected':''}>디자인</option>
-          <option value="상표" ${rec.right==='상표'?'selected':''}>상표</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Our-Ref</label>
-        <input id="ef-ourRef" value="${rec.ourRef||''}"/>
-      </div>
-      <div class="field">
-        <label>의뢰인</label>
-        <input id="ef-party" value="${rec.party||''}"/>
-      </div>
-      <div class="field">
-        <label>출원번호</label>
-        <input id="ef-appNo" value="${rec.appNo||''}"/>
-      </div>
-      <div class="field">
-        <label>등록번호</label>
-        <input id="ef-regNo" value="${rec.regNo||''}"/>
-      </div>
-      <div class="field">
-        <label>마감/예정일</label>
-        <input type="date" id="ef-dueDate" value="${rec.dueDate||''}"/>
-      </div>
-      <div class="field">
-        <label>상태</label>
-        <select id="ef-status">
-          <option value="완료" ${rec.status==='완료'?'selected':''}>완료</option>
-          <option value="미완료" ${rec.status==='미완료'?'selected':''}>미완료</option>
-          <option value="진행중" ${rec.status==='진행중'?'selected':''}>진행중</option>
-          <option value="확인필요" ${rec.status==='확인필요'?'selected':''}>확인필요</option>
-        </select>
-      </div>
-      <div class="field full">
-        <label>사건명</label>
-        <input id="ef-name" value="${rec.name||''}"/>
-      </div>
-      <div class="field">
-        <label>구분</label>
-        <input id="ef-category" value="${rec.category||''}"/>
-      </div>
-      <div class="field full">
-        <label>비고</label>
-        <textarea id="ef-note" rows="2">${rec.note||''}</textarea>
-      </div>
-      <div class="field full">
-        <label>첨부 PDF</label>
-        <div class="pdf-edit-row" id="ef-pdf-row">
-          ${rec.pdfUrl
-            ? `<a href="${rec.pdfUrl}" target="_blank" rel="noopener">📄 ${rec.pdfName||'PDF 보기/다운로드'}</a>
-               <button type="button" class="btn small ghost" id="ef-pdf-remove">삭제</button>`
-            : `<span class="meta">등록된 PDF 없음</span>
-               <input type="file" id="ef-pdf-input" accept=".pdf,application/pdf"/>`
-          }
+    <div class="edit-layout">
+      <div class="edit-form">
+        <div class="field">
+          <label>Task</label>
+          <select id="ef-source">
+            <option value="OA" ${rec.source==='OA'?'selected':''}>의견제출통지 등</option>
+            <option value="FEE" ${rec.source==='FEE'?'selected':''}>등록료 납부</option>
+            <option value="REG" ${rec.source==='REG'?'selected':''}>등록후관리</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>권리</label>
+          <select id="ef-right">
+            <option value="특허" ${rec.right==='특허'?'selected':''}>특허</option>
+            <option value="디자인" ${rec.right==='디자인'?'selected':''}>디자인</option>
+            <option value="상표" ${rec.right==='상표'?'selected':''}>상표</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>고객사</label>
+          <div class="input-with-btn">
+            <input id="ef-party" value="${rec.party||''}"/>
+            <button type="button" class="btn small ghost" id="ef-goto-client">고객사로 가기</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>출원번호</label>
+          <input id="ef-appNo" value="${rec.appNo||''}"/>
+        </div>
+        <div class="field">
+          <label>등록번호</label>
+          <input id="ef-regNo" value="${rec.regNo||''}"/>
+        </div>
+        <div class="field">
+          <label>마감/예정일</label>
+          <input type="date" id="ef-dueDate" value="${rec.dueDate||''}"/>
+        </div>
+        <div class="field">
+          <label>상태</label>
+          <select id="ef-status">
+            <option value="완료" ${rec.status==='완료'?'selected':''}>완료</option>
+            <option value="미완료" ${rec.status==='미완료'?'selected':''}>미완료</option>
+            <option value="진행중" ${rec.status==='진행중'?'selected':''}>진행중</option>
+            <option value="확인필요" ${rec.status==='확인필요'?'selected':''}>확인필요</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>사건명</label>
+          <input id="ef-name" value="${rec.name||''}"/>
+        </div>
+        <div class="field">
+          <label>구분</label>
+          <input id="ef-category" value="${rec.category||''}"/>
+        </div>
+        <div class="field full">
+          <label>비고</label>
+          <textarea id="ef-note" rows="2">${rec.note||''}</textarea>
+        </div>
+        <div class="field full">
+          <label>첨부 PDF</label>
+          <div class="pdf-edit-row" id="ef-pdf-row">
+            ${rec.pdfUrl
+              ? `<a href="${rec.pdfUrl}" target="_blank" rel="noopener">📄 ${rec.pdfName||'PDF 보기/다운로드'}</a>
+                 <button type="button" class="btn small ghost" id="ef-pdf-remove">삭제</button>`
+              : `<span class="meta">등록된 PDF 없음 · 여기로 끌어다 놓아도 업로드돼요</span>
+                 <input type="file" id="ef-pdf-input" accept=".pdf,application/pdf"/>`
+            }
+          </div>
         </div>
       </div>
-      ${relatedDocsHtml(rec)}
+      <div class="edit-sidebar">
+        ${clientInfoHtml(rec)}
+        ${relatedSectionsHtml(rec)}
+      </div>
     </div>
   `;
+  document.getElementById('ef-ourRef').value = rec.ourRef || '';
+
   const removeBtn = document.getElementById('ef-pdf-remove');
   if(removeBtn){
     removeBtn.addEventListener('click', async ()=>{
@@ -1829,24 +1867,31 @@ function renderEditForm(rec){
       renderEditForm(updated || rec);
     });
   }
-  document.querySelectorAll('.related-doc-edit').forEach(btn=>{
-    btn.addEventListener('click', ()=> openEditModal(btn.dataset.id));
+  document.getElementById('ef-goto-client').addEventListener('click', ()=>{
+    goToClientCases(document.getElementById('ef-party').value);
   });
+  document.querySelectorAll('.related-doc-item').forEach(item=>{
+    item.addEventListener('click', ()=> openEditModal(item.dataset.id));
+  });
+  document.querySelectorAll('.related-doc-item a').forEach(a=>{
+    a.addEventListener('click', e=> e.stopPropagation());
+  });
+  wireClientInfoSave(rec);
+  wirePdfDropZone(rec);
 }
 
-function normAppNo(v){ return (v||'').replace(/\D/g,''); }
+function normOurRef(v){ return (v||'').trim().toUpperCase(); }
 function normParty(v){ return (v||'').trim().replace(/\s+/g,' '); }
 
 function relatedDocsSectionHtml(title, items, labelFn){
   return `
-    <div class="field full">
-      <label>${title} · ${items.length}건</label>
+    <div class="sidebar-box">
+      <div class="sidebar-box-title">${title} · ${items.length}건</div>
       <div class="related-docs">
         ${items.map(r => `
-          <div class="related-doc-item">
+          <div class="related-doc-item" data-id="${r.id}">
             <span class="related-doc-cat">${labelFn(r)}</span>
             ${r.pdfUrl ? `<a href="${r.pdfUrl}" target="_blank" rel="noopener">📄 ${r.pdfName||'PDF 보기'}</a>` : `<span class="meta">PDF 없음</span>`}
-            <button type="button" class="btn small ghost related-doc-edit" data-id="${r.id}">이 문서 수정</button>
           </div>
         `).join('')}
       </div>
@@ -1854,13 +1899,13 @@ function relatedDocsSectionHtml(title, items, labelFn){
   `;
 }
 
-function relatedDocsHtml(rec){
+function relatedSectionsHtml(rec){
   if(!rec.id) return '';
-  const appKey = normAppNo(rec.appNo);
+  const caseKey = normOurRef(rec.ourRef);
   const partyKey = normParty(rec.party);
 
-  const sameCase = appKey
-    ? RECORDS.filter(r => r.id !== rec.id && normAppNo(r.appNo) === appKey)
+  const sameCase = caseKey
+    ? RECORDS.filter(r => r.id !== rec.id && normOurRef(r.ourRef) === caseKey)
     : [];
 
   const otherCasesMap = new Map();
@@ -1868,30 +1913,140 @@ function relatedDocsHtml(rec){
     RECORDS.forEach(r=>{
       if(r.id === rec.id) return;
       if(normParty(r.party) !== partyKey) return;
-      const key = normAppNo(r.appNo) || r.id;
-      if(appKey && key === appKey) return; // 같은 사건이면 위 섹션에서 이미 보여줌
+      const key = normOurRef(r.ourRef) || r.id;
+      if(caseKey && key === caseKey) return; // 같은 사례면 위 섹션에서 이미 보여줌
       if(!otherCasesMap.has(key)) otherCasesMap.set(key, r);
     });
   }
   const otherCases = [...otherCasesMap.values()];
 
-  if(!sameCase.length && !otherCases.length) return '';
-
   let html = '';
   if(sameCase.length){
-    html += relatedDocsSectionHtml(`같은 출원번호(${rec.appNo}) 관련 문서`, sameCase, r => r.category || r.source);
+    html += relatedDocsSectionHtml(`같은 사례번호(${rec.ourRef}) 관련 문서`, sameCase, r => r.category || r.source);
   }
   if(otherCases.length){
-    html += relatedDocsSectionHtml(`동일 의뢰인(${rec.party})의 다른 사건`, otherCases, r => (r.appNo||'번호 미상') + (r.name ? ' · '+r.name : ''));
+    html += relatedDocsSectionHtml(`동일 고객사(${rec.party})의 다른 사건`, otherCases, r => (r.ourRef||'사례번호 미상') + (r.name ? ' · '+r.name : ''));
   }
   return html;
+}
+
+/* ===================== 고객사 정보 ===================== */
+let CLIENTS = [];
+const CLOUD_CLIENTS_ROW_ID = 'clients';
+
+async function loadClients(){
+  try{
+    const { data, error } = await supabaseClient.from('dashboard_state')
+      .select('records').eq('id', CLOUD_CLIENTS_ROW_ID).maybeSingle();
+    if(error) throw error;
+    CLIENTS = (data && Array.isArray(data.records)) ? data.records : [];
+  }catch(e){
+    console.error('고객사 정보 불러오기 실패', e);
+    CLIENTS = [];
+  }
+}
+
+async function saveClients(){
+  try{
+    const { error } = await supabaseClient.from('dashboard_state').upsert({
+      id: CLOUD_CLIENTS_ROW_ID, records: CLIENTS, updated_at: new Date().toISOString()
+    });
+    if(error) throw error;
+  }catch(e){
+    console.error('고객사 정보 저장 실패', e);
+    alert('고객사 정보 저장에 실패했습니다.');
+  }
+}
+
+function findClient(party){
+  const key = normParty(party);
+  if(!key) return null;
+  return CLIENTS.find(c => normParty(c.name) === key) || null;
+}
+
+function upsertClient(party, fields){
+  const key = normParty(party);
+  if(!key) return;
+  let c = CLIENTS.find(c => normParty(c.name) === key);
+  if(!c){ c = { name: party }; CLIENTS.push(c); }
+  Object.assign(c, fields);
+}
+
+function clientInfoHtml(rec){
+  if(!rec.party) return '';
+  const client = findClient(rec.party) || {};
+  return `
+    <div class="sidebar-box">
+      <div class="sidebar-box-title">고객사 정보 · ${rec.party}</div>
+      <div class="field">
+        <label>특허고객번호</label>
+        <input id="ef-client-custno" value="${client.patentCustomerNo||''}"/>
+      </div>
+      <div class="field">
+        <label>메모</label>
+        <textarea id="ef-client-memo" rows="2">${client.memo||''}</textarea>
+      </div>
+    </div>
+  `;
+}
+
+function wireClientInfoSave(rec){
+  const custInput = document.getElementById('ef-client-custno');
+  const memoInput = document.getElementById('ef-client-memo');
+  if(!custInput) return;
+  const persist = async ()=>{
+    upsertClient(document.getElementById('ef-party').value, {
+      patentCustomerNo: custInput.value || null,
+      memo: memoInput.value || null,
+    });
+    await saveClients();
+  };
+  custInput.addEventListener('change', persist);
+  memoInput.addEventListener('change', persist);
+}
+
+function goToClientCases(party){
+  if(!party) return;
+  closeEditModal();
+  const box = document.getElementById('search');
+  box.value = party;
+  filters.q = party;
+  renderTable();
+  box.focus();
+}
+
+/* ===================== 첨부 PDF 드래그앤드롭 (수정 모달) ===================== */
+function wirePdfDropZone(rec){
+  const row = document.getElementById('ef-pdf-row');
+  if(!row) return;
+  ['dragover','dragenter'].forEach(evt => row.addEventListener(evt, e=>{
+    e.preventDefault(); row.classList.add('drop-hover');
+  }));
+  ['dragleave','drop'].forEach(evt => row.addEventListener(evt, e=>{
+    e.preventDefault(); row.classList.remove('drop-hover');
+  }));
+  row.addEventListener('drop', async e=>{
+    const file = e.dataTransfer.files[0];
+    if(!file) return;
+    if(rec.id){
+      await uploadCasePdf(rec.id, file);
+      const updated = RECORDS.find(x=>x.id===rec.id);
+      renderEditForm(updated || rec);
+    } else {
+      const input = document.getElementById('ef-pdf-input');
+      if(input){
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+      }
+    }
+  });
 }
 
 function openEditModal(id){
   const rec = RECORDS.find(r=>r.id===id);
   if(!rec) return;
   editingId = id;
-  document.getElementById('editModalTitle').textContent = '항목 수정';
   document.getElementById('editDeleteBtn').style.display = '';
   renderEditForm(rec);
   document.getElementById('editModalOverlay').classList.add('show');
@@ -1899,7 +2054,6 @@ function openEditModal(id){
 
 function openNewCaseModal(){
   editingId = null;
-  document.getElementById('editModalTitle').textContent = '새 사건 추가';
   document.getElementById('editDeleteBtn').style.display = 'none';
   renderEditForm({
     source:'REG', right:'특허', ourRef:'', party:'', appNo:'', regNo:'',
