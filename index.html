@@ -395,6 +395,13 @@ input[type=file]{display:none;}
   background:var(--paper-2);border:1px solid var(--line);border-radius:8px;
   padding:12px;margin:0;
 }
+.related-docs{display:flex;flex-direction:column;gap:8px;}
+.related-doc-item{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;
+  background:var(--paper-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+}
+.related-doc-cat{font-weight:600;}
+.related-doc-item a{color:var(--ok);font-weight:600;}
 .dropzone-hint{
   border:1.5px dashed var(--line-strong);border-radius:8px;padding:14px;text-align:center;
   font-size:12.5px;color:var(--muted);margin-bottom:14px;
@@ -1810,6 +1817,7 @@ function renderEditForm(rec){
           }
         </div>
       </div>
+      ${relatedDocsHtml(rec)}
     </div>
   `;
   const removeBtn = document.getElementById('ef-pdf-remove');
@@ -1821,6 +1829,29 @@ function renderEditForm(rec){
       renderEditForm(updated || rec);
     });
   }
+  document.querySelectorAll('.related-doc-edit').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditModal(btn.dataset.id));
+  });
+}
+
+function relatedDocsHtml(rec){
+  if(!rec.id || !rec.appNo) return '';
+  const related = RECORDS.filter(r => r.id !== rec.id && r.appNo === rec.appNo);
+  if(!related.length) return '';
+  return `
+    <div class="field full">
+      <label>같은 출원번호(${rec.appNo}) 관련 문서 · ${related.length}건</label>
+      <div class="related-docs">
+        ${related.map(r => `
+          <div class="related-doc-item">
+            <span class="related-doc-cat">${r.category || r.source}</span>
+            ${r.pdfUrl ? `<a href="${r.pdfUrl}" target="_blank" rel="noopener">📄 ${r.pdfName||'PDF 보기'}</a>` : `<span class="meta">PDF 없음</span>`}
+            <button type="button" class="btn small ghost related-doc-edit" data-id="${r.id}">이 문서 수정</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function openEditModal(id){
