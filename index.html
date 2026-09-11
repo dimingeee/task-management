@@ -1355,6 +1355,16 @@ function findValueSameLine(lines, re){
   }
   return null;
 }
+function extractPatentCustomerNo(text){
+  if(!text) return null;
+  const paren = text.match(/\(([^)]*)\)/);
+  if(paren){
+    const d = paren[1].match(/(\d{6,})/);
+    if(d) return d[1];
+  }
+  const m = text.match(/특\s*허\s*고\s*객\s*번\s*호\D*(\d{6,})/);
+  return m ? m[1] : null;
+}
 
 function filenameHints(filename){
   const base = filename.replace(/\.[Pp][Dd][Ff]$/,'').replace(/^_+|_+$/g,'');
@@ -1511,6 +1521,7 @@ function parseOARequest(lines, fullText){
     const m = lines[partyIdx].match(/(?:명\s*칭|성\s*명)\s*(.+)$/);
     if(m){
       let v = m[1].trim();
+      draft.patentCustomerNo = extractPatentCustomerNo(v);
       v = v.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim(); // 특허고객번호 등 괄호 제거
       draft.party = v || null;
     }
@@ -1518,6 +1529,10 @@ function parseOARequest(lines, fullText){
   if(!draft.party){
     const m = fullText.match(/출\s*원\s*인\s*(?:명\s*칭|성\s*명)\s*([^\n(（]+)/);
     if(m) draft.party = m[1].trim().replace(/\s+/g,' ') || null;
+  }
+  if(!draft.patentCustomerNo && partyIdx !== -1){
+    // 대리인 등 다른 특허고객번호와 섞이지 않도록 출원인 줄 근처만 확인
+    draft.patentCustomerNo = extractPatentCustomerNo(lines.slice(partyIdx, partyIdx+3).join(' '));
   }
 
   const nameIdx = findLineIdx(lines, /발\s*명\s*의\s*명\s*칭|디자인의\s*대상이\s*되는\s*물품/);
@@ -1581,6 +1596,8 @@ function parseClaimDeferralNotice(lines, fullText){
     const m = lines[partyIdx].match(/성\s*명\s*(.+)$/);
     if(m){
       let v = m[1].trim();
+      draft.patentCustomerNo = extractPatentCustomerNo(v)
+        || extractPatentCustomerNo(lines.slice(partyIdx, partyIdx+3).join(' '));
       v = v.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim(); // 특허고객번호 등 괄호 제거
       draft.party = v || null;
     }
@@ -1765,7 +1782,9 @@ async function commitDrafts(){
       memo: d.memo || '',
     });
     if(d.sourceFile) newIdsWithFile.push({ id, file: d.sourceFile });
+    if(d.party && d.patentCustomerNo) upsertClient(d.party, { patentCustomerNo: d.patentCustomerNo });
   });
+  if(ok.some(d=>d.party && d.patentCustomerNo)) await saveClients();
   await saveRecords();
   closeModal();
   renderTable();
@@ -2174,6 +2193,9 @@ document.getElementById('editModalCloseBtn').addEventListener('click', closeEdit
 document.getElementById('editCancelBtn').addEventListener('click', closeEditModal);
 document.getElementById('editSaveBtn').addEventListener('click', saveEditModal);
 document.getElementById('editDeleteBtn').addEventListener('click', deleteEditModal);
+document.getElementById('editModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'editModalOverlay') closeEditModal();
+});
 </script>
 </body>
 </html>
