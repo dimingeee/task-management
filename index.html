@@ -1834,17 +1834,17 @@ function renderEditForm(rec){
   });
 }
 
-function relatedDocsHtml(rec){
-  if(!rec.id || !rec.appNo) return '';
-  const related = RECORDS.filter(r => r.id !== rec.id && r.appNo === rec.appNo);
-  if(!related.length) return '';
+function normAppNo(v){ return (v||'').replace(/\D/g,''); }
+function normParty(v){ return (v||'').trim().replace(/\s+/g,' '); }
+
+function relatedDocsSectionHtml(title, items, labelFn){
   return `
     <div class="field full">
-      <label>같은 출원번호(${rec.appNo}) 관련 문서 · ${related.length}건</label>
+      <label>${title} · ${items.length}건</label>
       <div class="related-docs">
-        ${related.map(r => `
+        ${items.map(r => `
           <div class="related-doc-item">
-            <span class="related-doc-cat">${r.category || r.source}</span>
+            <span class="related-doc-cat">${labelFn(r)}</span>
             ${r.pdfUrl ? `<a href="${r.pdfUrl}" target="_blank" rel="noopener">📄 ${r.pdfName||'PDF 보기'}</a>` : `<span class="meta">PDF 없음</span>`}
             <button type="button" class="btn small ghost related-doc-edit" data-id="${r.id}">이 문서 수정</button>
           </div>
@@ -1852,6 +1852,39 @@ function relatedDocsHtml(rec){
       </div>
     </div>
   `;
+}
+
+function relatedDocsHtml(rec){
+  if(!rec.id) return '';
+  const appKey = normAppNo(rec.appNo);
+  const partyKey = normParty(rec.party);
+
+  const sameCase = appKey
+    ? RECORDS.filter(r => r.id !== rec.id && normAppNo(r.appNo) === appKey)
+    : [];
+
+  const otherCasesMap = new Map();
+  if(partyKey){
+    RECORDS.forEach(r=>{
+      if(r.id === rec.id) return;
+      if(normParty(r.party) !== partyKey) return;
+      const key = normAppNo(r.appNo) || r.id;
+      if(appKey && key === appKey) return; // 같은 사건이면 위 섹션에서 이미 보여줌
+      if(!otherCasesMap.has(key)) otherCasesMap.set(key, r);
+    });
+  }
+  const otherCases = [...otherCasesMap.values()];
+
+  if(!sameCase.length && !otherCases.length) return '';
+
+  let html = '';
+  if(sameCase.length){
+    html += relatedDocsSectionHtml(`같은 출원번호(${rec.appNo}) 관련 문서`, sameCase, r => r.category || r.source);
+  }
+  if(otherCases.length){
+    html += relatedDocsSectionHtml(`동일 의뢰인(${rec.party})의 다른 사건`, otherCases, r => (r.appNo||'번호 미상') + (r.name ? ' · '+r.name : ''));
+  }
+  return html;
 }
 
 function openEditModal(id){
