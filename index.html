@@ -383,6 +383,8 @@ input[type=file]{display:none;}
 .edit-form{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;padding:6px 2px 2px;}
 .edit-layout .field{display:flex;flex-direction:column;gap:6px;}
 .edit-form .field.full{grid-column:1 / -1;}
+.edit-form .section-label{grid-column:1 / -1;margin:4px 0 -6px;}
+.edit-form .section-label:first-child{margin-top:0;}
 .edit-layout label{
   font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--muted);
   letter-spacing:0.1px;
@@ -396,7 +398,6 @@ input[type=file]{display:none;}
 .edit-layout input:focus,.edit-layout select:focus,.edit-layout textarea:focus{
   outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);background:#FFFFFF;
 }
-.edit-layout input:disabled{background:var(--paper-2);color:var(--muted);}
 .edit-layout textarea{min-height:70px;}
 .edit-form .pdf-edit-row{
   background:var(--paper-2);border:1px solid var(--line);border-radius:8px;
@@ -417,7 +418,9 @@ input[type=file]{display:none;}
 .edit-sidebar{width:300px;flex:0 0 300px;display:flex;flex-direction:column;gap:14px;}
 .sidebar-box{
   background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  box-shadow:0 1px 2px rgba(17,24,39,0.04);
 }
+.sidebar-box.client-box{background:var(--card);border-color:var(--primary-soft);border-left:3px solid var(--primary);}
 .sidebar-box-title{
   font-family:var(--sans);font-size:11.5px;font-weight:700;color:var(--muted);
   margin-bottom:8px;letter-spacing:.1px;
@@ -1814,6 +1817,7 @@ function renderEditForm(rec){
   document.getElementById('editModalBody').innerHTML = `
     <div class="edit-layout">
       <div class="edit-form">
+        <div class="section-label">기본 정보</div>
         <div class="field">
           <label>Task</label>
           <select id="ef-source">
@@ -1845,6 +1849,7 @@ function renderEditForm(rec){
           <label>등록번호</label>
           <input id="ef-regNo" value="${rec.regNo||''}"/>
         </div>
+        <div class="section-label">일정 · 진행 상태</div>
         <div class="field">
           <label>마감/예정일</label>
           <input type="date" id="ef-dueDate" value="${rec.dueDate||''}"/>
@@ -1858,6 +1863,7 @@ function renderEditForm(rec){
             <option value="확인필요" ${rec.status==='확인필요'?'selected':''}>확인필요</option>
           </select>
         </div>
+        <div class="section-label">상세 내용</div>
         <div class="field full">
           <label>사건명</label>
           <input id="ef-name" value="${rec.name||''}"/>
@@ -1957,7 +1963,8 @@ function relatedSectionsHtml(rec){
 
   let html = '';
   if(sameCase.length){
-    html += relatedDocsSectionHtml(`같은 사례번호(${rec.ourRef}) 관련 문서`, sameCase, r => r.category || r.source);
+    html += relatedDocsSectionHtml(`같은 사례번호(${rec.ourRef}) 관련 문서`, sameCase,
+      r => `<span class="cat-badge src-${r.source}">${r.category || r.source}</span>`);
   }
   if(otherCases.length){
     html += relatedDocsSectionHtml(`동일 고객사(${rec.party})의 다른 사건`, otherCases, r => (r.ourRef||'사례번호 미상') + (r.name ? ' · '+r.name : ''));
@@ -2011,11 +2018,11 @@ function clientInfoHtml(rec){
   if(!rec.party) return '';
   const client = findClient(rec.party) || {};
   return `
-    <div class="sidebar-box">
+    <div class="sidebar-box client-box">
       <div class="sidebar-box-title">고객사 정보</div>
       <div class="field">
         <label>이름</label>
-        <input value="${rec.party}" disabled/>
+        <input id="ef-client-name" value="${rec.party}"/>
       </div>
       <div class="field">
         <label>특허고객번호</label>
@@ -2030,9 +2037,13 @@ function clientInfoHtml(rec){
 }
 
 function wireClientInfoSave(rec){
+  const nameInput = document.getElementById('ef-client-name');
   const custInput = document.getElementById('ef-client-custno');
   const memoInput = document.getElementById('ef-client-memo');
   if(!custInput) return;
+  nameInput.addEventListener('input', ()=>{
+    document.getElementById('ef-party').value = nameInput.value;
+  });
   const persist = async ()=>{
     upsertClient(document.getElementById('ef-party').value, {
       patentCustomerNo: custInput.value || null,
