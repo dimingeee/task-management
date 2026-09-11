@@ -396,6 +396,7 @@ input[type=file]{display:none;}
 .edit-layout input:focus,.edit-layout select:focus,.edit-layout textarea:focus{
   outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);background:#FFFFFF;
 }
+.edit-layout input:disabled{background:var(--paper-2);color:var(--muted);}
 .edit-layout textarea{min-height:70px;}
 .edit-form .pdf-edit-row{
   background:var(--paper-2);border:1px solid var(--line);border-radius:8px;
@@ -1357,12 +1358,13 @@ function findValueSameLine(lines, re){
 }
 function extractPatentCustomerNo(text){
   if(!text) return null;
+  // 특허고객번호는 "1020212345678"처럼 숫자만 있는 형식과 "1-2010-022790-1"처럼 대시가 섞인 형식이 둘 다 있음
   const paren = text.match(/\(([^)]*)\)/);
   if(paren){
-    const d = paren[1].match(/(\d{6,})/);
+    const d = paren[1].match(/(\d[\d\-]{5,}\d)/);
     if(d) return d[1];
   }
-  const m = text.match(/특\s*허\s*고\s*객\s*번\s*호\D*(\d{6,})/);
+  const m = text.match(/특\s*허\s*고\s*객\s*번\s*호\D*(\d[\d\-]{5,}\d)/);
   return m ? m[1] : null;
 }
 
@@ -1719,7 +1721,7 @@ function renderModal(){
         </select>
         <label>Our-Ref</label>
         <input data-field="ourRef" data-temp="${d.tempId}" value="${d.ourRef||''}"/>
-        <label>의뢰인</label>
+        <label>고객사</label>
         <input data-field="party" data-temp="${d.tempId}" value="${d.party||''}"/>
         <label>출원번호</label>
         <input data-field="appNo" data-temp="${d.tempId}" value="${d.appNo||''}"/>
@@ -1737,12 +1739,18 @@ function renderModal(){
           <option value="미완료" ${d.status==='미완료'?'selected':''}>미완료</option>
           <option value="확인필요" ${d.status==='확인필요'?'selected':''}>확인필요</option>
         </select>
+        <label class="full">비고</label>
+        <textarea class="full" data-field="note" data-temp="${d.tempId}">${d.note||''}</textarea>
+        <label>특허고객번호</label>
+        <input data-field="patentCustomerNo" data-temp="${d.tempId}" value="${d.patentCustomerNo||''}"/>
+        <label>고객사 메모</label>
+        <input data-field="clientMemo" data-temp="${d.tempId}" value="${d.clientMemo||''}"/>
       </div>
     </div>`;
   });
   body.innerHTML = html;
 
-  body.querySelectorAll('input,select').forEach(el=>{
+  body.querySelectorAll('input,select,textarea').forEach(el=>{
     el.addEventListener('input', (e)=>{
       const tempId = e.target.getAttribute('data-temp');
       const field = e.target.getAttribute('data-field');
@@ -1782,9 +1790,14 @@ async function commitDrafts(){
       memo: d.memo || '',
     });
     if(d.sourceFile) newIdsWithFile.push({ id, file: d.sourceFile });
-    if(d.party && d.patentCustomerNo) upsertClient(d.party, { patentCustomerNo: d.patentCustomerNo });
+    if(d.party && (d.patentCustomerNo || d.clientMemo)){
+      const fields = {};
+      if(d.patentCustomerNo) fields.patentCustomerNo = d.patentCustomerNo;
+      if(d.clientMemo) fields.memo = d.clientMemo;
+      upsertClient(d.party, fields);
+    }
   });
-  if(ok.some(d=>d.party && d.patentCustomerNo)) await saveClients();
+  if(ok.some(d=>d.party && (d.patentCustomerNo || d.clientMemo))) await saveClients();
   await saveRecords();
   closeModal();
   renderTable();
@@ -1999,7 +2012,11 @@ function clientInfoHtml(rec){
   const client = findClient(rec.party) || {};
   return `
     <div class="sidebar-box">
-      <div class="sidebar-box-title">고객사 정보 · ${rec.party}</div>
+      <div class="sidebar-box-title">고객사 정보</div>
+      <div class="field">
+        <label>이름</label>
+        <input value="${rec.party}" disabled/>
+      </div>
       <div class="field">
         <label>특허고객번호</label>
         <input id="ef-client-custno" value="${client.patentCustomerNo||''}"/>
