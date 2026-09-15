@@ -366,6 +366,7 @@ input[type=file]{display:none;}
   display:flex;justify-content:space-between;align-items:center;
 }
 .draft-file .remove-draft{cursor:pointer;color:var(--stamp);font-family:var(--sans);}
+.email-draft-btn{margin-bottom:10px;}
 .draft-grid{display:grid;grid-template-columns:100px 1fr 100px 1fr;gap:8px 10px;align-items:center;}
 .draft-grid label{font-size:11px;color:var(--muted);font-family:var(--sans);}
 .draft-grid input,.draft-grid select,.draft-grid textarea{
@@ -1295,6 +1296,13 @@ function toISO(d){
 function koDateToObj(y,m,d){
   return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
 }
+function extractKoDate(lines, labelRegex){
+  const idx = findLineIdx(lines, labelRegex);
+  if(idx === -1) return null;
+  const m = lines[idx].match(/(\d{4})[.\-](\d{1,2})[.\-](\d{1,2})/);
+  if(!m) return null;
+  return `${m[1]}.${String(m[2]).padStart(2,'0')}.${String(m[3]).padStart(2,'0')}`;
+}
 
 async function pdfToLines(arrayBuffer){
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1567,6 +1575,42 @@ function parseOARequest(lines, fullText){
     if(m) draft.dueDate = toISO(koDateToObj(m[1],m[2],m[3]));
   }
 
+  draft.decisionDate = extractKoDate(lines, /발송일자/);
+
+  return draft;
+}
+
+function parsePriorityExam(lines, fullText){
+  const draft = { right:'특허', ourRef:null, party:null, appNo:null, regNo:null, name:null, dueDate:null, category:'우선심사결정', status:'완료', note:null, source:'OA' };
+
+  if(/디자인보호법/.test(fullText)) draft.right = '디자인';
+  else if(/상표법/.test(fullText)) draft.right = '상표';
+
+  draft.appNo = findValueSameLine(lines, /출\s*원\s*번\s*호\D*([\d\-]{8,})/);
+
+  const nameIdx = findLineIdx(lines, /발\s*명\s*의\s*명\s*칭|디자인의\s*대상이\s*되는\s*물품/);
+  if(nameIdx !== -1){
+    let val = '';
+    const m = lines[nameIdx].match(/명\s*칭\s*(.+)$/) || lines[nameIdx].match(/물품\s*(.+)$/);
+    if(m) val = m[1].trim();
+    for(let i=1;i<=2;i++){
+      const next = lines[nameIdx+i];
+      if(!next || next.trim()==='') break;
+      if(/접수번호|보정할|번호|^【|^\d|^\(|^상기/.test(next)) break;
+      val += ' ' + next.trim();
+    }
+    draft.name = val.trim() || null;
+  }
+
+  const partyIdx = findLineIdx(lines, /출\s*원\s*인\s*명\s*칭|출\s*원\s*인\s*성\s*명/);
+  if(partyIdx !== -1){
+    const m = lines[partyIdx].match(/(?:명\s*칭|성\s*명)\s*(.+)$/);
+    if(m) draft.party = m[1].trim().replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim() || null;
+  }
+
+  draft.decisionDate = extractKoDate(lines, /발송일자|결정일자/);
+  draft.priorityRequestDate = extractKoDate(lines, /우\s*선\s*심\s*사\s*신\s*청\s*일\s*자/);
+
   return draft;
 }
 
@@ -1628,6 +1672,8 @@ function detectAndParse(lines, fullText, filename){
     draft = parseDecision(lines, fullText);
   } else if(/서류명[\s\S]{0,10}납부서/.test(fullText) && /등록권리자/.test(fullText)){
     draft = parsePaymentSubmission(lines, fullText);
+  } else if(/우\s*선\s*심\s*사\s*결\s*정\s*서/.test(fullText) || (/우선심사/.test(fullText) && /우선심사\s*대상으로\s*결정/.test(fullText))){
+    draft = parsePriorityExam(lines, fullText);
   } else if(/보\s*정\s*요\s*구\s*서|의\s*견\s*제\s*출\s*통\s*지\s*서|우\s*선\s*심\s*사\s*신\s*청\s*보\s*완\s*요\s*구\s*서|거\s*절\s*이\s*유\s*통\s*지\s*서/.test(fullText) && /제\s*출\s*기\s*일/.test(fullText)){
     draft = parseOARequest(lines, fullText);
   } else if(/청구범위\s*제출유예\s*안내서/.test(fullText)){
@@ -1649,6 +1695,166 @@ function detectAndParse(lines, fullText, filename){
     draft.extra.memo = buildAutoMemo(draft.extra);
   }
   return draft;
+}
+
+/* ===================== 사건 유형별 고객사 보고 이메일 초안 ===================== */
+
+const EMAIL_SIGNATURE = `변리사 김성수(Mr.)
+Patent attorney
+
+BASS Patent Law Office
+서울특별시 송파구 올림픽로 300, 30층 3049호
+Tel : +82-10-4296-2559│ E-mail : bass@basspat.co
+
+This e-mail is intended for the exclusive use of the individual or entity named above and may
+constitute information that is privileged or confidential or otherwise protected from disclosure.
+Dissemination, distribution, forwarding or copying of this e-mail by anyone other than
+the intended recipient is prohibited. If you have received this e-mail in error, please notify us
+immediately by telephone (+82-10-4296-2559) or e-mail(bass@basspat.co) and completely delete
+or destroy any and all electronic or other copies of the original message.
+
+** ATTORNEY-CLIENT PRIVILEGED COMMUNICATION **`;
+
+function isoToKo(iso){
+  if(!iso) return '[ ]';
+  const m = iso.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return iso;
+  return `${m[1]}년 ${parseInt(m[2])}월 ${parseInt(m[3])}일`;
+}
+function dotToKo(s){
+  if(!s) return '[ ]';
+  const m = s.match(/(\d{4})\.(\d{2})\.(\d{2})/);
+  if(!m) return s;
+  return `${m[1]}년 ${parseInt(m[2])}월 ${parseInt(m[3])}일`;
+}
+
+function emailTemplateKind(category){
+  if(category === '우선심사결정') return 'priority';
+  if(category === '설정등록료 납부') return 'registration';
+  if(['의견제출통지서','거절이유통지서','보정요구서','우선심사신청보완요구서'].includes(category)) return 'oa';
+  return null;
+}
+
+function buildEmailDraft(d){
+  const kind = emailTemplateKind(d.category);
+  if(!kind) return null;
+  const party = d.party || '[고객명]';
+  const name = d.name || '[사건명]';
+  const appNo = d.appNo || '[출원번호]';
+  const ourRef = d.ourRef || '[ ]';
+  let subject, body;
+
+  if(kind === 'priority'){
+    const reqKo = d.priorityRequestDate ? dotToKo(d.priorityRequestDate) : '[신청일]';
+    subject = `[베이스]우선 심사 결정 보고의 건(출원번호 제${appNo}호, our ref: ${ourRef})`;
+    body = `안녕하세요. ${party} 대표님.
+베이스특허 김성수 변리사입니다.
+
+아래 특허출원 건에 대하여, 특허청으로부터 우선심사결정서가 발행되어 보고드립니다.
+
+1. 사건 정보
+•	사건명: ${name}
+•	출원번호: ${appNo}
+
+2. 결정 내용 안내
+•	지난 ${reqKo} 당소에서 제출한 우선심사신청이 특허청 요건을 충족하여 우선심사 대상으로 최종 결정되었습니다.
+•	이에 따라 본 사건은 일반 출원 건보다 우선하여 심사관이 배정되며, 빠른 시일 내에 특허 심사가 진행될 예정입니다.
+
+3. 향후 진행 안내
+•	특허청의 실제 심사 결과는 본 결정일로부터 약 2~5개월 이내에 발행될 것으로 예상됩니다.
+•	심사 결과가 나오는 대로 당소에서 내용을 검토하여 즉시 보고드리겠습니다.
+
+관련하여 궁금하신 사항이 있으시면 언제든 편하게 문의해주세요.
+
+감사합니다.
+김성수 드림`;
+  } else if(kind === 'oa'){
+    const sentKo = dotToKo(d.decisionDate);
+    const dueKo = isoToKo(d.dueDate);
+    subject = `[베이스]${d.category} 발행 보고의 건(출원번호 제${appNo}호, our ref: ${ourRef})`;
+    body = `안녕하세요. ${party} 대표님.
+베이스특허 김성수 변리사입니다.
+
+아래 사건에 대하여 특허청으로부터 심사 결과인 ${d.category}가 ${sentKo} 자로 발행되어, 이를 보고드립니다.
+
+1. 사건 정보
+•	발명의 명칭: ${name}
+•	출원번호: ${appNo}
+•	대응 기한: ${dueKo}
+
+2. 현재 상황 안내
+•	특허청 심사 과정에서 발행되는 ${d.category}는 최종 거절 결정이 아니며, 특허 등록을 위해 거쳐 가는 통상적인 중간 심사 절차입니다.
+•	심사관이 판단한 일부 거절이유를 해소하고 청구범위를 더욱 견고하게 다듬기 위한 과정이므로 염려하지 않으셔도 됩니다.
+
+3. 향후 진행 계획 및 안내 사항
+•	당소 진행 사항: 현재 당소에서 심사관이 지적한 거절이유를 면밀히 분석하고 있습니다.
+분석이 완료되는 대로, 구체적인 대응 방안을 작성하여 [보고 예정일]까지 보고 드리겠습니다.
+•	안내 사항: 당소의 상세 대응 방안이 마련될 때까지 잠시 기다려 주시면 감사하겠습니다.
+추후 송부해 드리는 대응 방안을 확인하시고 향후 진행 여부 및 방향에 대한 의견을 주시면, 당소에서 그에 맞추어 차질 없이 후속 절차를 진행하겠습니다.
+
+추가적인 문의 사항이 있으시면 언제든 편하게 문의해주세요.
+
+감사합니다.
+김성수 드림`;
+  } else if(kind === 'registration'){
+    const decKo = dotToKo(d.decisionDate);
+    const dueKo = isoToKo(d.dueDate);
+    subject = `[베이스]${d.right||'특허'} 등록결정 보고의 건(출원번호 제${appNo}호, our ref: ${ourRef})`;
+    body = `안녕하세요. ${party} 대표님
+베이스특허 김성수 변리사입니다.
+
+그동안 당소를 믿고 진행해 주신 대표님의 출원 건에 대하여, 특허청으로부터 최종 등록결정이 되었음을 기쁜 마음으로 보고드립니다.
+
+그간의 노력이 결실을 맺어 소중한 지식재산권을 확보하시게 된 것을 진심으로 축하드립니다.
+
+1. 사건 정보
+•	사건명: ${name}
+•	출원번호: ${appNo}
+•	등록결정일: ${decKo}
+
+2. 등록 안내 사항
+특허청의 등록결정 이후, 최종적으로 권리를 발생시키기 위해서는 법정 기한 내에 등록료를 납부해야 합니다.
+등록료를 입금해 주시면 당소에서 특허청 납부를 진행해드리며, 등록 완료 후 특허등록증을 전달드립니다.
+•	등록료: [등록료]원([감면율]% 감면 적용)
+•	계좌번호: 기업은행 062-186713-04-011 김성수(베이스특허법률사무소)
+•	등록료 납부 기한: ${dueKo}까지
+•	실물 특허등록증 발급 주소 : [발급 주소]
+
+다시 한번 귀사의 등록 결정을 진심으로 축하드립니다. 관련하여 문의 사항이 있으시면 언제든 연락 주시기 바랍니다.
+
+감사합니다.
+김성수 드림`;
+  }
+
+  body = '** ATTORNEY-CLIENT PRIVILEGED COMMUNICATION **\n\n\n' + body + '\n\n\n' + EMAIL_SIGNATURE;
+  return { subject, body };
+}
+
+function utf8Base64(str){
+  return btoa(unescape(encodeURIComponent(str))).replace(/(.{76})/g,'$1\r\n');
+}
+
+function downloadEmailDraft(d){
+  const mail = buildEmailDraft(d);
+  if(!mail) return;
+  const eml = [
+    'MIME-Version: 1.0',
+    'To: ',
+    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(mail.subject)))}?=`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    utf8Base64(mail.body.replace(/\r?\n/g,'\r\n')),
+  ].join('\r\n');
+  const blob = new Blob([eml], { type:'message/rfc822' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = mail.subject.replace(/[\\/:*?"<>|]/g,'_') + '.eml';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 let pendingDrafts = [];
@@ -1712,9 +1918,11 @@ function renderModal(){
       </div>`;
       return;
     }
+    const hasEmail = !!emailTemplateKind(d.category);
     html += `
     <div class="draft-card" data-temp="${d.tempId}">
       <div class="draft-file">${d.filename} <span class="remove-draft" data-remove="${d.tempId}">제외 ✕</span></div>
+      ${hasEmail ? `<button type="button" class="btn ghost small email-draft-btn" data-email="${d.tempId}">📧 고객사 보고 이메일 초안(.eml) 다운로드</button>` : ''}
       <div class="draft-grid">
         <label>권리</label>
         <select data-field="right" data-temp="${d.tempId}">
@@ -1766,6 +1974,13 @@ function renderModal(){
       const id = el.getAttribute('data-remove');
       pendingDrafts = pendingDrafts.filter(d=>d.tempId!==id);
       renderModal();
+    });
+  });
+  body.querySelectorAll('.email-draft-btn').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.getAttribute('data-email');
+      const d = pendingDrafts.find(x=>x.tempId===id);
+      if(d) downloadEmailDraft(d);
     });
   });
 }
