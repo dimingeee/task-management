@@ -1451,7 +1451,7 @@ function parseCertificate(lines, fullText){
 }
 
 function parseDecision(lines, fullText){
-  const draft = { right:null, ourRef:null, party:null, appNo:null, regNo:null, name:null, dueDate:null, category:'설정등록료 납부', status:'미완료', note:null, source:'REG' };
+  const draft = { right:null, ourRef:null, party:null, appNo:null, regNo:null, name:null, dueDate:null, category:'설정등록료 납부', status:'미완료', note:null, source:'FEE' };
 
   let months = 3;
   if(/상표법/.test(fullText)) { draft.right = '상표'; months = 2; }
@@ -1548,7 +1548,7 @@ function parseRejectionDecision(lines, fullText){
 }
 
 function parsePaymentSubmission(lines, fullText){
-  const draft = { right:'특허', ourRef:null, party:null, appNo:null, regNo:null, name:null, dueDate:null, category:'설정등록료 납부접수', status:'확인필요', note:null, source:'REG' };
+  const draft = { right:'특허', ourRef:null, party:null, appNo:null, regNo:null, name:null, dueDate:null, category:'설정등록료 납부접수', status:'확인필요', note:null, source:'FEE' };
 
   const partyIdx = findLineIdx(lines, /등록권리자/);
   if(partyIdx !== -1){
