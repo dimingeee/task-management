@@ -700,6 +700,7 @@ async function removeCasePdf(id){
 
 /* ===================== 저장/불러오기 ===================== */
 let storageMode = 'unknown'; // 'cloud' | 'local' | 'none'
+let loadFailed = false; // 불러오기 실패 시 저장 차단 (시드 데이터로 클라우드 덮어쓰기 방지)
 
 async function loadRecords(){
   try{
@@ -708,24 +709,53 @@ async function loadRecords(){
     if(error) throw error;
     if(data && Array.isArray(data.records)){
       RECORDS = data.records;
+      snapBase();
       storageMode = 'cloud';
       updateStorageBadge();
       return;
     }
   }catch(e){
     console.error('Supabase 불러오기 실패', e);
-    alert('데이터를 불러오지 못했습니다. Supabase SQL 설정과 로그인 상태를 확인해주세요.');
+    alert('데이터를 불러오지 못했습니다. 새로고침해주세요. (반복되면 로그인 상태 확인 — 그동안 저장은 차단됩니다)');
+    loadFailed = true;
+    RECORDS = [];
+    storageMode = 'none';
+    updateStorageBadge();
+    return;
   }
   RECORDS = SEED_DATA.slice();
   await saveRecords();
 }
 
+// 마지막으로 서버와 동기화된 상태(id → JSON). 저장 시 다른 사람/탭이 먼저 저장한 내용을 덮어쓰지 않기 위한 기준.
+let BASE = new Map();
+function snapBase(){ BASE = new Map(RECORDS.map(r=>[r.id, JSON.stringify(r)])); }
+
 async function saveRecords(){
+  if(loadFailed){ alert('데이터를 불러오지 못한 상태라 저장하지 않았습니다. 새로고침해주세요.'); return false; }
   try{
+    // 저장 직전 서버 최신본과 병합: 내가 바꾼/삭제한 행만 반영, 나머지는 서버 것을 유지
+    // ponytail: 조회~저장 사이 수 ms 경합은 남음, 필요하면 updated_at 조건부 update로 강화
+    const { data: remote, error: rErr } = await supabaseClient.from('dashboard_state')
+      .select('records').eq('id', CLOUD_ROW_ID).maybeSingle();
+    if(rErr) throw rErr;
+    if(remote && Array.isArray(remote.records)){
+      const local = new Map(RECORDS.map(r=>[r.id, r]));
+      const merged = [];
+      remote.records.forEach(r=>{
+        if(!local.has(r.id)){ if(!BASE.has(r.id)) merged.push(r); } // 로컬엔 없음: 내가 지운 게 아니면(=남이 추가) 유지
+        else if(JSON.stringify(local.get(r.id)) !== BASE.get(r.id)) merged.push(local.get(r.id)); // 내가 수정
+        else merged.push(r); // 안 건드림 → 서버 최신
+      });
+      const seen = new Set(merged.map(r=>r.id));
+      RECORDS.forEach(r=>{ if(!seen.has(r.id)) merged.push(r); }); // 내가 새로 추가
+      RECORDS = merged;
+    }
     const { error } = await supabaseClient.from('dashboard_state').upsert({
       id: CLOUD_ROW_ID, records: RECORDS, updated_at: new Date().toISOString()
     });
     if(error) throw error;
+    snapBase();
     storageMode = 'cloud';
     updateStorageBadge();
     return true;
@@ -1158,10 +1188,16 @@ async function handleFiles(fileList){
     alert('인식할 수 있는 표(정리파일 / 등록료 납부 안내 / 등록후관리 형식)를 찾지 못했습니다.\n헤더 행에 "권리" 컬럼이 있는지 확인해주세요.');
     return;
   }
-  // 인식된 소스는 통째로 교체, 나머지는 유지
+  // 기존 기록은 절대 지우지 않고 병합: 같은 사건(출원번호+마감종류)이면 마감일 등 값을 갱신(PDF 첨부 유지), 없으면 추가
+  const key = r => [r.source, r.appNo || r.ourRef || r.name, r.category].join('|');
+  const pool = new Map(); // key → 아직 매칭 안 된 기존 기록들
+  RECORDS.forEach(r=>{ const k=key(r); (pool.get(k) || pool.set(k,[]).get(k)).push(r); });
   sources.forEach(src=>{
-    RECORDS = RECORDS.filter(r=>r.source!==src);
-    RECORDS = RECORDS.concat(importedBySource[src]);
+    importedBySource[src].forEach(imp=>{
+      const hit = (pool.get(key(imp)) || []).shift();
+      if(hit){ const { id, ...fields } = imp; Object.assign(hit, fields); }
+      else { imp.id = imp.id + '-' + Date.now().toString(36); RECORDS.push(imp); }
+    });
   });
   await saveRecords();
   document.getElementById('lastUpdated').textContent = '방금 업데이트됨 · ' + new Date().toLocaleString('ko-KR');
