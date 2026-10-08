@@ -1957,27 +1957,42 @@ function downloadEmailDraft(d){
 
 /* 관리표에서 사라졌지만 Storage에 남아 있는 PDF를 찾아 다시 분석 → 확인 모달로 복원 */
 async function recoverOrphanPdfs(){
-  const bucket = supabaseClient.storage.from(PDF_BUCKET);
-  const { data: dirs, error } = await bucket.list('', { limit:1000 });
-  if(error){ alert('저장소 조회 실패: '+error.message); return; }
-  const known = new Set(RECORDS.map(r=>r.id));
-  const files = [];
-  for(const d of dirs){
-    if(known.has(d.name)) continue;
-    const { data: objs } = await bucket.list(d.name, { limit:100 });
-    for(const o of (objs||[])){
-      const path = d.name+'/'+o.name;
-      if(RECORDS.some(r=>r.pdfPath===path)) continue;
+  const btn = document.getElementById('recoverBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  try{
+    const bucket = supabaseClient.storage.from(PDF_BUCKET);
+    btn.textContent = '저장소 조회 중…';
+    const { data: dirs, error } = await bucket.list('', { limit:1000 });
+    if(error) throw error;
+    const known = new Set(RECORDS.map(r=>r.id));
+    const orphanDirs = dirs.filter(d=>!known.has(d.name));
+    const paths = [];
+    for(const d of orphanDirs){
+      const { data: objs } = await bucket.list(d.name, { limit:100 });
+      (objs||[]).forEach(o=>{ const path = d.name+'/'+o.name; if(!RECORDS.some(r=>r.pdfPath===path)) paths.push(path); });
+    }
+    if(!confirm(`저장소 폴더 ${dirs.length}개 / 관리표 기록 ${RECORDS.length}건
+관리표에 연결 안 된 PDF: ${paths.length}건
+
+${paths.length ? '다운로드해서 분석할까요?' : '복구할 PDF가 없습니다.'}`) || !paths.length) return;
+    const files = [];
+    for(const [i, path] of paths.entries()){
+      btn.textContent = `다운로드 ${i+1}/${paths.length}`;
       const { data: blob, error: dErr } = await bucket.download(path);
       if(dErr || !blob) continue;
-      const f = new File([blob], o.name, { type:'application/pdf' });
+      const f = new File([blob], path.split('/').pop(), { type:'application/pdf' });
       f.orphanPath = path;
       files.push(f);
     }
+    await handlePdfFiles(files);
+  }catch(e){
+    console.error(e);
+    alert('복구 중 오류: '+(e.message||e));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = label;
   }
-  if(!files.length){ alert('복구할 PDF가 없습니다.'); return; }
-  if(!confirm(`관리표에 없는 PDF ${files.length}건을 찾았습니다. 분석해서 확인 화면에 띄울까요?`)) return;
-  await handlePdfFiles(files);
 }
 
 let pendingDrafts = [];
