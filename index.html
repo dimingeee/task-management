@@ -483,7 +483,7 @@ body.drag-active .drop-overlay{display:flex;}
     </div>
     <div class="masthead-right">
       <div class="updated-tag" id="lastUpdated">최초 데이터 · 2026.08.11 기준<br/><span class="storage-badge" id="storageBadge">확인 중…</span></div>
-      <button class="btn ghost small" id="resetBtn">초기화</button>
+      <button class="btn ghost small" id="recoverBtn" title="Storage에는 있지만 관리표에서 사라진 PDF를 찾아 다시 등록">누락 PDF 복구</button>
       <button class="btn ghost small" id="logoutBtn">로그아웃</button>
       <button class="btn ghost small" id="exportBtn">엑셀로 내보내기</button>
       <button class="btn ghost small" id="pdfUploadBtn">PDF 업로드</button>
@@ -1236,13 +1236,7 @@ async function init(){
   document.getElementById('pdfUploadBtn').addEventListener('click', ()=>{
     document.getElementById('pdfInput').click();
   });
-  document.getElementById('resetBtn').addEventListener('click', async ()=>{
-    if(confirm('업로드/체크 기록을 지우고 최초 데이터로 되돌릴까요?')){
-      RECORDS = SEED_DATA.slice();
-      await saveRecords();
-      renderTable();
-    }
-  });
+  document.getElementById('recoverBtn').addEventListener('click', recoverOrphanPdfs);
   document.getElementById('logoutBtn').addEventListener('click', async ()=>{
     await supabaseClient.auth.signOut();
     location.reload();
@@ -1960,6 +1954,32 @@ function downloadEmailDraft(d){
   URL.revokeObjectURL(url);
 }
 
+
+/* 관리표에서 사라졌지만 Storage에 남아 있는 PDF를 찾아 다시 분석 → 확인 모달로 복원 */
+async function recoverOrphanPdfs(){
+  const bucket = supabaseClient.storage.from(PDF_BUCKET);
+  const { data: dirs, error } = await bucket.list('', { limit:1000 });
+  if(error){ alert('저장소 조회 실패: '+error.message); return; }
+  const known = new Set(RECORDS.map(r=>r.id));
+  const files = [];
+  for(const d of dirs){
+    if(known.has(d.name)) continue;
+    const { data: objs } = await bucket.list(d.name, { limit:100 });
+    for(const o of (objs||[])){
+      const path = d.name+'/'+o.name;
+      if(RECORDS.some(r=>r.pdfPath===path)) continue;
+      const { data: blob, error: dErr } = await bucket.download(path);
+      if(dErr || !blob) continue;
+      const f = new File([blob], o.name, { type:'application/pdf' });
+      f.orphanPath = path;
+      files.push(f);
+    }
+  }
+  if(!files.length){ alert('복구할 PDF가 없습니다.'); return; }
+  if(!confirm(`관리표에 없는 PDF ${files.length}건을 찾았습니다. 분석해서 확인 화면에 띄울까요?`)) return;
+  await handlePdfFiles(files);
+}
+
 let pendingDrafts = [];
 
 async function handlePdfFiles(fileList){
@@ -1979,6 +1999,7 @@ async function handlePdfFiles(fileList){
       const draft = detectAndParse(lines, fullText, file.name);
       draft.tempId = 'd'+Math.random().toString(36).slice(2,9);
       draft.sourceFile = file;
+      draft.orphanPath = file.orphanPath;
       const extra = draft.extra;
       delete draft.extra;
       pendingDrafts.push(draft);
@@ -2110,7 +2131,7 @@ async function commitDrafts(){
       regNo: d.regNo,
       memo: d.memo || '',
     });
-    if(d.sourceFile) newIdsWithFile.push({ id, file: d.sourceFile });
+    if(d.sourceFile) newIdsWithFile.push({ id, file: d.sourceFile, orphanPath: d.orphanPath });
     if(d.party && (d.patentCustomerNo || d.clientMemo)){
       const fields = {};
       if(d.patentCustomerNo) fields.patentCustomerNo = d.patentCustomerNo;
@@ -2123,9 +2144,12 @@ async function commitDrafts(){
   closeModal();
   renderTable();
   document.getElementById('lastUpdated').textContent = 'PDF ' + ok.length + '건 반영됨 · ' + new Date().toLocaleString('ko-KR');
-  for(const { id, file } of newIdsWithFile){
+  const oldPaths = new Set();
+  for(const { id, file, orphanPath } of newIdsWithFile){
     await uploadCasePdf(id, file);
+    if(orphanPath && RECORDS.find(r=>r.id===id)?.pdfPath) oldPaths.add(orphanPath); // 새 사본 업로드 확인 후에만 기존 고아 파일 정리
   }
+  if(oldPaths.size) await supabaseClient.storage.from(PDF_BUCKET).remove([...oldPaths]);
 }
 
 /* ===================== 개별 항목 수정/추가 모달 ===================== */
