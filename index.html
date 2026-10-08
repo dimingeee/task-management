@@ -1188,14 +1188,14 @@ async function handleFiles(fileList){
     alert('인식할 수 있는 표(정리파일 / 등록료 납부 안내 / 등록후관리 형식)를 찾지 못했습니다.\n헤더 행에 "권리" 컬럼이 있는지 확인해주세요.');
     return;
   }
-  // 기존 기록은 절대 지우지 않고 병합: 같은 사건(출원번호+마감종류)이면 마감일 등 값을 갱신(PDF 첨부 유지), 없으면 추가
+  // 기존 기록은 절대 지우지 않고 병합: 같은 사건(출원번호+마감종류)이면 마감일·비고만 갱신, 없으면 추가
   const key = r => [r.source, r.appNo || r.ourRef || r.name, r.category].join('|');
   const pool = new Map(); // key → 아직 매칭 안 된 기존 기록들
   RECORDS.forEach(r=>{ const k=key(r); (pool.get(k) || pool.set(k,[]).get(k)).push(r); });
   sources.forEach(src=>{
     importedBySource[src].forEach(imp=>{
       const hit = (pool.get(key(imp)) || []).shift();
-      if(hit){ const { id, ...fields } = imp; Object.assign(hit, fields); }
+      if(hit){ if(imp.dueDate) hit.dueDate = imp.dueDate; if(imp.note) hit.note = imp.note; } // 기존 건은 마감일·비고만 갱신(엑셀의 빈 칸은 무시)
       else { imp.id = imp.id + '-' + Date.now().toString(36); RECORDS.push(imp); }
     });
   });
